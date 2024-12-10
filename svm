@@ -1,0 +1,111 @@
+import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.feature_selection import RFE
+from sklearn.model_selection import StratifiedKFold
+from sklearn.svm import SVC
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+import numpy as np
+
+# 读取Excel文件
+# df = pd.read_excel(r'E:\result\svm分类研究\data\sivsfsi\sivsfsi11.xlsx', engine='openpyxl', header=None)
+df = pd.read_excel(r'E:\result\svm分类研究\data\sivsnc\mddvsnc12.xlsx', engine='openpyxl', header=None)
+
+
+# 获取特征数据和标签
+X = df.iloc[:, :200].values  # 前200列为特征
+y = df.iloc[:, 200].values   # 第201列为标签
+
+# 创建SVM模型
+svm_model = SVC(kernel="linear", probability=True)
+
+# 使用StratifiedKFold进行5-fold交叉验证
+skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=10)
+
+# 初始化记录每个特征数量下的结果
+results = []
+
+# 迭代特征数量，范围为0到200，以20为步长
+for n_features in range(20, 201, 20):
+    print(f"Evaluating RFE with {n_features} features")
+    
+    # 创建RFE对象，选择n_features个特征
+    rfe = RFE(estimator=svm_model, n_features_to_select=n_features)
+    rfe.fit(X, y)
+
+    # 使用选择的特征
+    selected_features = X[:, rfe.support_]
+
+    # 初始化度量指标列表
+    accuracy_list = []
+    precision_list = []
+    recall_list = []
+    f1_list = []
+
+    for train_index, test_index in skf.split(selected_features, y):
+        # 分割数据
+        X_train, X_test = selected_features[train_index], selected_features[test_index]
+        y_train, y_test = y[train_index], y[test_index]
+        
+        # 训练模型
+        svm_model.fit(X_train, y_train)
+        
+        # 预测标签
+        y_pred = svm_model.predict(X_test)
+        
+        # 计算各项指标
+        accuracy = accuracy_score(y_test, y_pred)
+        precision = precision_score(y_test, y_pred, average='binary')
+        recall = recall_score(y_test, y_pred, average='binary')
+        f1 = f1_score(y_test, y_pred, average='binary')
+        
+        # 将每一折的结果存入列表
+        accuracy_list.append(accuracy)
+        precision_list.append(precision)
+        recall_list.append(recall)
+        f1_list.append(f1)
+    
+    # 计算每个特征数量下的平均指标和标准差
+    avg_accuracy = np.mean(accuracy_list)
+    avg_precision = np.mean(precision_list)
+    avg_recall = np.mean(recall_list)
+    avg_f1 = np.mean(f1_list)
+    
+    std_accuracy = np.std(accuracy_list)
+    std_precision = np.std(precision_list)
+    std_recall = np.std(recall_list)
+    std_f1 = np.std(f1_list)
+    
+    # 存储结果，包括平均值和标准差
+    results.append({
+        'n_features': n_features,
+        'avg_accuracy': avg_accuracy,
+        'std_accuracy': std_accuracy,
+        'avg_precision': avg_precision,
+        'std_precision': std_precision,
+        'avg_recall': avg_recall,
+        'std_recall': std_recall,
+        'avg_f1': avg_f1,
+        'std_f1': std_f1
+    })
+
+    # 打印每个特征数量的平均结果和标准差
+    print(f"Features: {n_features}, Avg Accuracy: {avg_accuracy:.4f} ± {std_accuracy:.4f}, "
+          f"Avg Precision: {avg_precision:.4f} ± {std_precision:.4f}, "
+          f"Avg Recall: {avg_recall:.4f} ± {std_recall:.4f}, Avg F1: {avg_f1:.4f} ± {std_f1:.4f}")
+
+# 将结果存储为DataFrame
+results_df = pd.DataFrame(results)
+
+# 将结果保存到Excel文件中
+results_df.to_excel("rfe_feature_selection_results_with_std.xlsx", index=False)
+
+# 输出每个特征数量的结果
+print("\nOptimal feature selection results:")
+for result in results:
+    print(f"Features: {result['n_features']}, Avg Accuracy: {result['avg_accuracy']:.4f} ± {result['std_accuracy']:.4f}, "
+          f"Avg Precision: {result['avg_precision']:.4f} ± {result['std_precision']:.4f}, "
+          f"Avg Recall: {result['avg_recall']:.4f} ± {result['std_recall']:.4f}, Avg F1: {result['avg_f1']:.4f} ± {result['std_f1']:.4f}")
+
+# 找到 F1 分数最高的特征数量
+best_result = max(results, key=lambda x: x['avg_f1'])
+print(f"\nBest number of features: {best_result['n_features']} with Avg F1: {best_result['avg_f1']:.4f} ± {best_result['std_f1']:.4f}")
