@@ -1,0 +1,49 @@
+import pandas as pd
+from sklearn.feature_selection import RFE
+from sklearn.model_selection import StratifiedKFold
+from sklearn.svm import SVC
+import numpy as np
+
+# 读取Excel文件
+# df = pd.read_excel(r'E:\result\svm分类研究\data\sivsfsi\sivsfsi.xlsx', engine='openpyxl', header=None)
+df = pd.read_excel(r'E:\result\svm分类研究\data\sivsnc\mddvsnc.xlsx', engine='openpyxl', header=None)
+
+# 获取特征数据和标签
+X = df.iloc[:, :200].values  # 前200列为特征
+y = df.iloc[:, 200].values   # 第201列为标签
+
+# 创建SVM模型
+svm_model = SVC(kernel="linear",probability=True)
+
+# 创建RFE对象，选择80个特征
+n_features_to_select = 80
+rfe = RFE(estimator=svm_model, n_features_to_select=n_features_to_select)
+
+# 使用StratifiedKFold进行5-fold交叉验证
+skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=10)
+
+# 初始化用于存储每折的特征排名
+feature_rankings = np.zeros(X.shape[1])
+
+# 交叉验证循环
+for i, (train_index, test_index) in enumerate(skf.split(X, y)):
+    # 分割数据
+    X_train, X_test = X[train_index], X[test_index]
+    y_train, y_test = y[train_index], y[test_index]
+    
+    # 对每一折进行RFE特征选择
+    rfe.fit(X_train, y_train)
+    
+    # 累积特征的排名
+    feature_rankings += rfe.ranking_
+
+# 计算平均排名
+avg_rankings = feature_rankings / 5
+
+# 获取排名最靠前的10个特征（排名越低，特征贡献越大，1 表示最重要的特征）
+top_10_features = np.argsort(avg_rankings)[:10]
+
+# 打印前10个特征及其平均排名
+print("Top 10 important features (across 5 folds):")
+for i, feature in enumerate(top_10_features):
+    print(f"Feature {feature+1}: Average Rank = {avg_rankings[feature]:.4f}")
